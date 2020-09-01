@@ -47,6 +47,13 @@ struct IMAADPCMWAVDecoder *IMAADPCMWAVDecoder_Create(void *work, int32_t work_si
 /* デコーダハンドル破棄 */
 void IMAADPCMWAVDecoder_Destroy(struct IMAADPCMWAVDecoder *decoder);
 
+/* 単一データブロックデコード */
+IMAADPCMApiResult IMAADPCMWAVDecoder_DecodeBlock(
+    struct IMAADPCMWAVDecoder *decoder,
+    const uint8_t *data, uint32_t data_size, 
+    int16_t **buffer, uint32_t buffer_num_channels, uint32_t buffer_num_samples, 
+    uint32_t num_decode_samples, uint32_t *read_size);
+
 /* ヘッダ含めファイル全体をデコード */
 IMAADPCMApiResult IMAADPCMWAVDecoder_DecodeWhole(
     struct IMAADPCMWAVDecoder *decoder, const uint8_t *data, uint32_t data_size,

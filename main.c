@@ -38,21 +38,24 @@ int main(int argc, char **argv)
     struct IMAADPCMWAVHeaderInfo header;
     struct WAVFile *wav;
     struct WAVFileFormat wavformat;
-    int16_t *output[2];
+    int16_t *output[IMAADPCM_MAX_NUM_CHANNELS];
     uint32_t ch, smpl;
+
+    /* デコーダ作成 */
+    decoder = IMAADPCMWAVDecoder_Create(NULL, 0);
 
     /* ヘッダ読み取り */
     if (IMAADPCMWAVDecoder_DecodeHeader(buffer, buffer_size, &header) != IMAADPCM_APIRESULT_OK) {
       fprintf(stderr, "Failed to read header. \n");
       return 1;
     }
-
-    decoder = IMAADPCMWAVDecoder_Create(NULL, 0);
     
+    /* 出力バッファ領域確保 */
     for (ch = 0; ch < header.num_channels; ch++) {
       output[ch] = malloc(sizeof(int16_t) * header.num_samples);
     }
 
+    /* 全データをデコード */
     if (IMAADPCMWAVDecoder_DecodeWhole(decoder, 
           buffer, buffer_size, output, 
           header.num_channels, header.num_samples) != IMAADPCM_APIRESULT_OK) {

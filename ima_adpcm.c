@@ -27,11 +27,11 @@
 
 /* 内部エラー型 */
 typedef enum IMAADPCMErrorTag {
-  IMAADPCMWAV_ERROR_OK = 0,              /* OK */
-  IMAADPCMWAV_ERROR_NG,                  /* 分類不能な失敗 */
-  IMAADPCMWAV_ERROR_INVALID_ARGUMENT,    /* 不正な引数 */
-  IMAADPCMWAV_ERROR_INVALID_FORMAT,      /* 不正なフォーマット       */
-  IMAADPCMWAV_ERROR_INSUFFICIENT_BUFFER  /* バッファサイズが足りない */
+  IMAADPCM_ERROR_OK = 0,              /* OK */
+  IMAADPCM_ERROR_NG,                  /* 分類不能な失敗 */
+  IMAADPCM_ERROR_INVALID_ARGUMENT,    /* 不正な引数 */
+  IMAADPCM_ERROR_INVALID_FORMAT,      /* 不正なフォーマット       */
+  IMAADPCM_ERROR_INSUFFICIENT_BUFFER  /* バッファサイズが足りない */
 } IMAADPCMError;
 
 /* コア処理デコーダ */
@@ -52,14 +52,14 @@ static int16_t IMAADPCMCoreDecoder_DecodeSample(
     struct IMAADPCMCoreDecoder *decoder, uint8_t nibble);
 
 /* モノラルブロックのデコード */
-static void IMAADPCMWAVDecoder_DecodeBlockMono(
+static IMAADPCMError IMAADPCMWAVDecoder_DecodeBlockMono(
     struct IMAADPCMCoreDecoder *core_decoder,
     const uint8_t *read_pos, uint32_t data_size, 
-    int16_t *buffer, uint32_t buffer_num_samples,
+    int16_t **buffer, uint32_t buffer_num_samples,
     uint32_t num_decode_samples, uint32_t *read_size);
 
 /* ステレオブロックのデコード */
-static void IMAADPCMWAVDecoder_DecodeBlockStereo(
+static IMAADPCMError IMAADPCMWAVDecoder_DecodeBlockStereo(
     struct IMAADPCMCoreDecoder *core_decoder,
     const uint8_t *read_pos, uint32_t data_size, 
     int16_t **buffer, uint32_t buffer_num_samples, 
@@ -299,10 +299,10 @@ static int16_t IMAADPCMCoreDecoder_DecodeSample(
 }
 
 /* モノラルブロックのデコード */
-static void IMAADPCMWAVDecoder_DecodeBlockMono(
+static IMAADPCMError IMAADPCMWAVDecoder_DecodeBlockMono(
     struct IMAADPCMCoreDecoder *core_decoder,
     const uint8_t *read_pos, uint32_t data_size, 
-    int16_t *buffer, uint32_t buffer_num_samples,
+    int16_t **buffer, uint32_t buffer_num_samples,
     uint32_t num_decode_samples, uint32_t *read_size)
 {
   uint8_t u8buf;
@@ -311,11 +311,20 @@ static void IMAADPCMWAVDecoder_DecodeBlockMono(
   const uint8_t *read_head = read_pos;
 
   /* 引数チェック */
-  assert((core_decoder != NULL) && (read_pos != NULL)
-      && (buffer != NULL) && (read_size != NULL));
+  if ((core_decoder == NULL) || (read_pos == NULL)
+      || (buffer == NULL) || (read_size == NULL)) {
+    return IMAADPCM_ERROR_INVALID_ARGUMENT;
+  }
 
   /* バッファサイズチェック */
-  assert(buffer_num_samples >= num_decode_samples);
+  if (buffer_num_samples < num_decode_samples) {
+    return IMAADPCM_ERROR_INSUFFICIENT_BUFFER;
+  }
+
+  /* 指定サンプル分デコードしきれるか確認 */
+  if (num_decode_samples > 2 * (data_size - 4)) {
+    return IMAADPCM_ERROR_INSUFFICIENT_BUFFER;
+  }
 
   /* ブロックヘッダデコード */
   ByteArray_GetUint16LE(read_pos, (uint16_t *)&(core_decoder->sample_val));
@@ -324,7 +333,7 @@ static void IMAADPCMWAVDecoder_DecodeBlockMono(
   assert(u8buf == 0);
 
   /* 先頭サンプルはヘッダに入っている */
-  buffer[0] = core_decoder->sample_val;
+  buffer[0][0] = core_decoder->sample_val;
 
   /* ブロックデータデコード */
   for (smpl = 1; smpl < num_decode_samples; smpl += 2) {
@@ -332,16 +341,17 @@ static void IMAADPCMWAVDecoder_DecodeBlockMono(
     ByteArray_GetUint8(read_pos, &u8buf);
     nibble[0] = (u8buf >> 0) & 0xF;
     nibble[1] = (u8buf >> 4) & 0xF;
-    buffer[smpl + 0] = IMAADPCMCoreDecoder_DecodeSample(core_decoder, nibble[0]);
-    buffer[smpl + 1] = IMAADPCMCoreDecoder_DecodeSample(core_decoder, nibble[1]);
+    buffer[0][smpl + 0] = IMAADPCMCoreDecoder_DecodeSample(core_decoder, nibble[0]);
+    buffer[0][smpl + 1] = IMAADPCMCoreDecoder_DecodeSample(core_decoder, nibble[1]);
   }
 
-  /* 読み出しサイズ */
+  /* 読み出しサイズをセット */
   (*read_size) = (uint32_t)(read_pos - read_head);
+  return IMAADPCM_ERROR_OK;
 }
 
 /* ステレオブロックのデコード */
-static void IMAADPCMWAVDecoder_DecodeBlockStereo(
+static IMAADPCMError IMAADPCMWAVDecoder_DecodeBlockStereo(
     struct IMAADPCMCoreDecoder *core_decoder,
     const uint8_t *read_pos, uint32_t data_size, 
     int16_t **buffer, uint32_t buffer_num_samples, 
@@ -353,12 +363,21 @@ static void IMAADPCMWAVDecoder_DecodeBlockStereo(
   const uint8_t *read_head = read_pos;
 
   /* 引数チェック */
-  assert((core_decoder != NULL) && (read_pos != NULL)
-      && (buffer != NULL) && (buffer[0] != NULL) && (buffer[1] != NULL)
-      && (read_size != NULL));
+  if ((core_decoder == NULL) || (read_pos == NULL)
+      || (buffer == NULL) || (buffer[0] == NULL) || (buffer[1] == NULL)
+      || (read_size == NULL)) {
+    return IMAADPCM_ERROR_INVALID_ARGUMENT;
+  }
 
   /* バッファサイズチェック */
-  assert(buffer_num_samples >= num_decode_samples);
+  if (buffer_num_samples < num_decode_samples) {
+    return IMAADPCM_ERROR_INSUFFICIENT_BUFFER;
+  }
+
+  /* 指定サンプル分デコードしきれるか確認 */
+  if (num_decode_samples > 2 * (data_size - 8)) {
+    return IMAADPCM_ERROR_INSUFFICIENT_BUFFER;
+  }
 
   /* ブロックヘッダデコード */
   for (ch = 0; ch < 2; ch++) {
@@ -395,8 +414,65 @@ static void IMAADPCMWAVDecoder_DecodeBlockStereo(
     }
   }
 
-  /* 読み出しサイズ */
+  /* 読み出しサイズをセット */
   (*read_size) = (uint32_t)(read_pos - read_head);
+  return IMAADPCM_ERROR_OK;
+}
+
+/* 単一データブロックデコード */
+IMAADPCMApiResult IMAADPCMWAVDecoder_DecodeBlock(
+    struct IMAADPCMWAVDecoder *decoder,
+    const uint8_t *data, uint32_t data_size, 
+    int16_t **buffer, uint32_t buffer_num_channels, uint32_t buffer_num_samples, 
+    uint32_t num_decode_samples, uint32_t *read_size)
+{
+  IMAADPCMError err;
+  const struct IMAADPCMWAVHeaderInfo *header;
+
+  /* 引数チェック */
+  if ((decoder == NULL) || (data == NULL) || (buffer == NULL)
+      || (read_size == NULL)) {
+    return IMAADPCM_APIRESULT_INVALID_ARGUMENT;
+  }
+
+  header = &(decoder->header);
+
+  /* バッファサイズチェック */
+  if (buffer_num_channels < header->num_channels) {
+    return IMAADPCM_APIRESULT_INSUFFICIENT_BUFFER;
+  }
+
+  /* ブロックデコード */
+  switch (header->num_channels) {
+    case 1:
+      err = IMAADPCMWAVDecoder_DecodeBlockMono(decoder->core_decoder, 
+          data, data_size, buffer, buffer_num_samples, 
+          num_decode_samples, read_size);
+      break;
+    case 2:
+      err = IMAADPCMWAVDecoder_DecodeBlockStereo(decoder->core_decoder, 
+          data, data_size, buffer, buffer_num_samples, 
+          num_decode_samples, read_size);
+      break;
+    default:
+      return IMAADPCM_APIRESULT_INVALID_FORMAT;
+  }
+
+  /* デコード時のエラーハンドル */
+  if (err != IMAADPCM_ERROR_OK) {
+    switch (err) {
+      case IMAADPCM_ERROR_INVALID_ARGUMENT:
+        return IMAADPCM_APIRESULT_INVALID_ARGUMENT;
+      case IMAADPCM_ERROR_INVALID_FORMAT:
+        return IMAADPCM_APIRESULT_INVALID_FORMAT;
+      case IMAADPCM_ERROR_INSUFFICIENT_BUFFER:
+        return IMAADPCM_APIRESULT_INSUFFICIENT_BUFFER;
+      default:
+        return IMAADPCM_APIRESULT_NG;
+    }
+  }
+
+  return IMAADPCM_APIRESULT_OK;
 }
 
 /* ヘッダ含めファイル全体をデコード */
@@ -441,28 +517,19 @@ IMAADPCMApiResult IMAADPCMWAVDecoder_DecodeWhole(
     }
 
     /* ブロックデコード */
-    switch (header->num_channels) {
-      case 1:
-        IMAADPCMWAVDecoder_DecodeBlockMono(decoder->core_decoder, 
-            read_pos, data_size - read_offset, buffer_ptr[0],
-            buffer_num_samples - progress, 
-            num_decode_samples, &read_size);
-        break;
-      case 2:
-        IMAADPCMWAVDecoder_DecodeBlockStereo(decoder->core_decoder, 
-            read_pos, data_size - read_offset, buffer_ptr,
-            buffer_num_samples - progress, 
-            num_decode_samples, &read_size);
-        break;
-      default:
-        return IMAADPCM_APIRESULT_INVALID_FORMAT;
+    if ((ret = IMAADPCMWAVDecoder_DecodeBlock(decoder,
+          read_pos, data_size - read_offset,
+          buffer_ptr, buffer_num_channels, buffer_num_samples - progress, 
+          num_decode_samples, &read_size)) != IMAADPCM_APIRESULT_OK) {
+      return ret;
     }
 
     /* 進捗更新 */
-    assert(read_size <= header->block_size);
     read_pos    += read_size;
     read_offset += read_size;
     progress    += num_decode_samples;
+    assert(read_size <= header->block_size);
+    assert(read_offset <= data_size);
   }
 
   /* 成功終了 */
