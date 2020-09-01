@@ -34,28 +34,28 @@ int main(int argc, char **argv)
   fclose(fp);
 
   {
-    struct IMAADPCMDecoder *decoder;
-    struct IMAADPCMHeaderInfo header_info;
+    struct IMAADPCMWAVDecoder *decoder;
+    struct IMAADPCMWAVHeaderInfo header_info;
     struct WAVFile *wav;
     struct WAVFileFormat wavformat;
     int16_t *output[2];
     uint32_t ch, smpl, output_num_samples;
 
     /* ヘッダ読み取り */
-    if (IMAADPCMDecoder_DecodeHeader(buffer, buffer_size, &header_info) != IMAADPCM_APIRESULT_OK) {
+    if (IMAADPCMWAVDecoder_DecodeHeader(buffer, buffer_size, &header_info) != IMAADPCMWAV_APIRESULT_OK) {
       fprintf(stderr, "Failed to read header. \n");
       return 1;
     }
 
-    decoder = IMAADPCMDecoder_Create(NULL, 0);
+    decoder = IMAADPCMWAVDecoder_Create(NULL, 0);
     
     for (ch = 0; ch < header_info.num_channels; ch++) {
       output[ch] = malloc(sizeof(int16_t) * header_info.num_samples);
     }
 
-    if (IMAADPCMDecoder_DecodeWhole(decoder, 
+    if (IMAADPCMWAVDecoder_DecodeWhole(decoder, 
           buffer, buffer_size, output, 
-          header_info.num_samples, &output_num_samples) != IMAADPCM_APIRESULT_OK) {
+          header_info.num_samples, &output_num_samples) != IMAADPCMWAV_APIRESULT_OK) {
       return 1;
     }
 
@@ -74,7 +74,7 @@ int main(int argc, char **argv)
 
     WAV_WriteToFile("a.wav", wav);
 
-    IMAADPCMDecoder_Destroy(decoder);
+    IMAADPCMWAVDecoder_Destroy(decoder);
     for (ch = 0; ch < header_info.num_channels; ch++) {
       free(output[ch]);
     }
