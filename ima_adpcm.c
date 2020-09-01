@@ -7,32 +7,32 @@
 #include <string.h>
 
 /* アラインメント */
-#define IMAADPCMWAV_ALIGNMENT 16
+#define IMAADPCM_ALIGNMENT 16
 
 /* nの倍数への切り上げ */
-#define IMAADPCMWAV_ROUND_UP(val, n) ((((val) + ((n) - 1)) / (n)) * (n))
+#define IMAADPCM_ROUND_UP(val, n) ((((val) + ((n) - 1)) / (n)) * (n))
 
 /* 最大値を選択 */
-#define IMAADPCMWAV_MAX_VAL(a, b) (((a) > (b)) ? (a) : (b))
+#define IMAADPCM_MAX_VAL(a, b) (((a) > (b)) ? (a) : (b))
 
 /* 最小値を選択 */
-#define IMAADPCMWAV_MIN_VAL(a, b) (((a) < (b)) ? (a) : (b))
+#define IMAADPCM_MIN_VAL(a, b) (((a) < (b)) ? (a) : (b))
 
 /* min以上max未満に制限 */
-#define IMAADPCMWAV_INNER_VAL(val, min, max) IMAADPCMWAV_MAX_VAL(min, IMAADPCMWAV_MIN_VAL(max, val))
+#define IMAADPCM_INNER_VAL(val, min, max) IMAADPCM_MAX_VAL(min, IMAADPCM_MIN_VAL(max, val))
 
 /* FourCCの一致確認 */
-#define IMAADPCMWAV_CHECK_FOURCC(u32lebuf, c1, c2, c3, c4) \
+#define IMAADPCM_CHECK_FOURCC(u32lebuf, c1, c2, c3, c4) \
   ((u32lebuf) == ((c1 << 0) | (c2 << 8) | (c3 << 16) | (c4 << 24)))
 
 /* 内部エラー型 */
-typedef enum IMAADPCMWAVErrorTag {
+typedef enum IMAADPCMErrorTag {
   IMAADPCMWAV_ERROR_OK = 0,              /* OK */
   IMAADPCMWAV_ERROR_NG,                  /* 分類不能な失敗 */
   IMAADPCMWAV_ERROR_INVALID_ARGUMENT,    /* 不正な引数 */
   IMAADPCMWAV_ERROR_INVALID_FORMAT,      /* 不正なフォーマット       */
   IMAADPCMWAV_ERROR_INSUFFICIENT_BUFFER  /* バッファサイズが足りない */
-} IMAADPCMWAVError;
+} IMAADPCMError;
 
 /* コア処理デコーダ */
 struct IMAADPCMCoreDecoder {
@@ -43,7 +43,7 @@ struct IMAADPCMCoreDecoder {
 /* デコーダ */
 struct IMAADPCMWAVDecoder {
   struct IMAADPCMWAVHeaderInfo  header;
-  struct IMAADPCMCoreDecoder    core_decoder[IMAADPCMWAV_MAX_NUM_CHANNELS];
+  struct IMAADPCMCoreDecoder    core_decoder[IMAADPCM_MAX_NUM_CHANNELS];
   void                          *work;
 };
 
@@ -66,11 +66,11 @@ static void IMAADPCMWAVDecoder_DecodeBlockStereo(
     uint32_t num_decode_samples, uint32_t *read_size);
 
 /* インデックス変動テーブル */
-static const int8_t IMAADPCMWAV_index_table[16]
+static const int8_t IMAADPCM_index_table[16]
   = { -1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8 };
 
 /* ステップサイズ量子化テーブル */
-static const uint16_t IMAADPCMWAV_stepsize_table[89] 
+static const uint16_t IMAADPCM_stepsize_table[89] 
   = { 7, 8, 9, 10, 11, 12, 13, 14, 
     16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60,
     66, 73, 80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209,
@@ -84,7 +84,7 @@ static const uint16_t IMAADPCMWAV_stepsize_table[89]
 /* ワークサイズ計算 */
 int32_t IMAADPCMWAVDecoder_CalculateWorkSize(void)
 {
-  return IMAADPCMWAV_ALIGNMENT + sizeof(struct IMAADPCMWAVDecoder);
+  return IMAADPCM_ALIGNMENT + sizeof(struct IMAADPCMWAVDecoder);
 }
 
 /* デコードハンドル作成 */
@@ -109,7 +109,7 @@ struct IMAADPCMWAVDecoder *IMAADPCMWAVDecoder_Create(void *work, int32_t work_si
   work_ptr = (uint8_t *)work;
 
   /* アラインメントを揃えてから構造体を配置 */
-  work_ptr = (uint8_t *)IMAADPCMWAV_ROUND_UP((uintptr_t)work_ptr, IMAADPCMWAV_ALIGNMENT);
+  work_ptr = (uint8_t *)IMAADPCM_ROUND_UP((uintptr_t)work_ptr, IMAADPCM_ALIGNMENT);
   decoder = (struct IMAADPCMWAVDecoder *)work_ptr;
 
   /* ハンドルの中身を0初期化 */
@@ -133,7 +133,7 @@ void IMAADPCMWAVDecoder_Destroy(struct IMAADPCMWAVDecoder *decoder)
 }
 
 /* ヘッダデコード */
-IMAADPCMWAVApiResult IMAADPCMWAVDecoder_DecodeHeader(
+IMAADPCMApiResult IMAADPCMWAVDecoder_DecodeHeader(
     const uint8_t *data, uint32_t data_size, struct IMAADPCMWAVHeaderInfo *header_info)
 {
   const uint8_t *data_pos;
@@ -143,7 +143,7 @@ IMAADPCMWAVApiResult IMAADPCMWAVDecoder_DecodeHeader(
 
   /* 引数チェック */
   if ((data == NULL) || (header_info == NULL)) {
-    return IMAADPCMWAV_APIRESULT_INVALID_ARGUMENT;
+    return IMAADPCM_APIRESULT_INVALID_ARGUMENT;
   }
 
   /* 読み出し用ポインタ設定 */
@@ -151,40 +151,40 @@ IMAADPCMWAVApiResult IMAADPCMWAVDecoder_DecodeHeader(
 
   /* RIFFチャンクID */
   ByteArray_GetUint32LE(data_pos, &u32buf);
-  if (!IMAADPCMWAV_CHECK_FOURCC(u32buf, 'R', 'I', 'F', 'F')) {
-    return IMAADPCMWAV_APIRESULT_INVALID_FORMAT;
+  if (!IMAADPCM_CHECK_FOURCC(u32buf, 'R', 'I', 'F', 'F')) {
+    return IMAADPCM_APIRESULT_INVALID_FORMAT;
   }
   /* RIFFチャンクサイズ（読み飛ばし） */
   ByteArray_GetUint32LE(data_pos, &u32buf);
 
   /* WAVEチャンクID */
   ByteArray_GetUint32LE(data_pos, &u32buf);
-  if (!IMAADPCMWAV_CHECK_FOURCC(u32buf, 'W', 'A', 'V', 'E')) {
-    return IMAADPCMWAV_APIRESULT_INVALID_FORMAT;
+  if (!IMAADPCM_CHECK_FOURCC(u32buf, 'W', 'A', 'V', 'E')) {
+    return IMAADPCM_APIRESULT_INVALID_FORMAT;
   }
 
   /* FMTチャンクID */
   ByteArray_GetUint32LE(data_pos, &u32buf);
-  if (!IMAADPCMWAV_CHECK_FOURCC(u32buf, 'f', 'm', 't', ' ')) {
-    return IMAADPCMWAV_APIRESULT_INVALID_FORMAT;
+  if (!IMAADPCM_CHECK_FOURCC(u32buf, 'f', 'm', 't', ' ')) {
+    return IMAADPCM_APIRESULT_INVALID_FORMAT;
   }
   /* fmtチャンクサイズ */
   ByteArray_GetUint32LE(data_pos, &u32buf);
   if (data_size < u32buf) {
     fprintf(stderr, "Data size too small. fmt chunk size:%d data size:%d \n", u32buf, data_size);
-    return IMAADPCMWAV_APIRESULT_INSUFFICIENT_BUFFER;
+    return IMAADPCM_APIRESULT_INSUFFICIENT_BUFFER;
   }
   /* WAVEフォーマットタイプ: IMA-ADPCM以外は受け付けない */
   ByteArray_GetUint16LE(data_pos, &u16buf);
   if (u16buf != 17) {
     fprintf(stderr, "Unsupported format: %d \n", u16buf);
-    return IMAADPCMWAV_APIRESULT_INVALID_FORMAT;
+    return IMAADPCM_APIRESULT_INVALID_FORMAT;
   }
   /* チャンネル数 */
   ByteArray_GetUint16LE(data_pos, &u16buf);
-  if (u16buf > IMAADPCMWAV_MAX_NUM_CHANNELS) {
+  if (u16buf > IMAADPCM_MAX_NUM_CHANNELS) {
     fprintf(stderr, "Unsupported channels: %d \n", u16buf);
-    return IMAADPCMWAV_APIRESULT_INVALID_FORMAT;
+    return IMAADPCM_APIRESULT_INVALID_FORMAT;
   }
   tmp_header_info.num_channels = u16buf;
   /* サンプリングレート */
@@ -203,7 +203,7 @@ IMAADPCMWAVApiResult IMAADPCMWAVDecoder_DecodeHeader(
   ByteArray_GetUint16LE(data_pos, &u16buf);
   if (u16buf != 2) {
     fprintf(stderr, "Unsupported fmt chunk extra size: %d \n", u16buf);
-    return IMAADPCMWAV_APIRESULT_INVALID_FORMAT;
+    return IMAADPCM_APIRESULT_INVALID_FORMAT;
   }
   /* ブロックあたりサンプル数 */
   ByteArray_GetUint16LE(data_pos, &u16buf);
@@ -211,14 +211,14 @@ IMAADPCMWAVApiResult IMAADPCMWAVDecoder_DecodeHeader(
 
   /* FACTチャンクID */
   ByteArray_GetUint32LE(data_pos, &u32buf);
-  if (!IMAADPCMWAV_CHECK_FOURCC(u32buf, 'f', 'a', 'c', 't')) {
-    return IMAADPCMWAV_APIRESULT_INVALID_FORMAT;
+  if (!IMAADPCM_CHECK_FOURCC(u32buf, 'f', 'a', 'c', 't')) {
+    return IMAADPCM_APIRESULT_INVALID_FORMAT;
   }
   /* FACTチャンクサイズ: 4以外は想定していない */
   ByteArray_GetUint32LE(data_pos, &u32buf);
   if (u32buf != 4) {
     fprintf(stderr, "Unsupported fact chunk size: %d \n", u16buf);
-    return IMAADPCMWAV_APIRESULT_INVALID_FORMAT;
+    return IMAADPCM_APIRESULT_INVALID_FORMAT;
   }
   /* サンプル数 */
   ByteArray_GetUint32LE(data_pos, &u32buf);
@@ -229,7 +229,7 @@ IMAADPCMWAVApiResult IMAADPCMWAVDecoder_DecodeHeader(
     uint32_t chunkid;
     /* チャンクID取得 */
     ByteArray_GetUint32LE(data_pos, &chunkid);
-    if (IMAADPCMWAV_CHECK_FOURCC(chunkid, 'd', 'a', 't', 'a')) {
+    if (IMAADPCM_CHECK_FOURCC(chunkid, 'd', 'a', 't', 'a')) {
       /* データチャンクを見つけたら終わり */
       break;
     } else {
@@ -249,7 +249,7 @@ IMAADPCMWAVApiResult IMAADPCMWAVDecoder_DecodeHeader(
 
   /* 成功終了 */
   (*header_info) = tmp_header_info;
-  return IMAADPCMWAV_APIRESULT_OK;
+  return IMAADPCM_APIRESULT_OK;
 }
 
 /* 1サンプルデコード */
@@ -268,11 +268,11 @@ static int16_t IMAADPCMCoreDecoder_DecodeSample(
   idx = decoder->stepsize_index;
 
   /* ステップサイズの取得 */
-  stepsize = IMAADPCMWAV_stepsize_table[idx];
+  stepsize = IMAADPCM_stepsize_table[idx];
 
   /* インデックス更新 */
-  idx += IMAADPCMWAV_index_table[nibble];
-  idx = IMAADPCMWAV_INNER_VAL(idx, 0, 88);
+  idx += IMAADPCM_index_table[nibble];
+  idx = IMAADPCM_INNER_VAL(idx, 0, 88);
 
   /* 差分算出 */
   /* diff = stepsize * (delta * 2 + 1) / 8 */
@@ -289,7 +289,7 @@ static int16_t IMAADPCMCoreDecoder_DecodeSample(
   }
 
   /* 16bit幅にクリップ */
-  smp = IMAADPCMWAV_INNER_VAL(smp, -32768, 32767);
+  smp = IMAADPCM_INNER_VAL(smp, -32768, 32767);
 
   /* 計算結果の反映 */
   decoder->sample_val = (int16_t)smp;
@@ -400,28 +400,33 @@ static void IMAADPCMWAVDecoder_DecodeBlockStereo(
 }
 
 /* ヘッダ含めファイル全体をデコード */
-IMAADPCMWAVApiResult IMAADPCMWAVDecoder_DecodeWhole(
+IMAADPCMApiResult IMAADPCMWAVDecoder_DecodeWhole(
     struct IMAADPCMWAVDecoder *decoder, const uint8_t *data, uint32_t data_size,
-    int16_t **buffer, uint32_t buffer_num_samples, uint32_t *output_num_samples)
+    int16_t **buffer, uint32_t buffer_num_channels, uint32_t buffer_num_samples)
 {
-  IMAADPCMWAVApiResult ret;
+  IMAADPCMApiResult ret;
   uint32_t progress, ch, read_size, read_offset, num_decode_samples;
   const uint8_t *read_pos;
-  int16_t *buffer_ptr[IMAADPCMWAV_MAX_NUM_CHANNELS];
+  int16_t *buffer_ptr[IMAADPCM_MAX_NUM_CHANNELS];
   const struct IMAADPCMWAVHeaderInfo *header;
 
   /* 引数チェック */
-  if ((decoder == NULL) || (data == NULL)
-      || (buffer == NULL) || (output_num_samples == NULL)) {
-    return IMAADPCMWAV_APIRESULT_INVALID_ARGUMENT;
+  if ((decoder == NULL) || (data == NULL) || (buffer == NULL)) {
+    return IMAADPCM_APIRESULT_INVALID_ARGUMENT;
   }
 
   /* ヘッダデコード */
   if ((ret = IMAADPCMWAVDecoder_DecodeHeader(data, data_size, &(decoder->header)))
-      != IMAADPCMWAV_APIRESULT_OK) {
+      != IMAADPCM_APIRESULT_OK) {
     return ret;
   }
   header = &(decoder->header);
+
+  /* バッファサイズチェック */
+  if ((buffer_num_channels < header->num_channels)
+      || (buffer_num_samples < header->num_samples)) {
+    return IMAADPCM_APIRESULT_INSUFFICIENT_BUFFER;
+  }
 
   progress = 0;
   read_offset = 0;
@@ -429,7 +434,7 @@ IMAADPCMWAVApiResult IMAADPCMWAVDecoder_DecodeWhole(
   while (progress < header->num_samples) {
     /* デコードサンプル数の確定 */
     num_decode_samples
-      = IMAADPCMWAV_MIN_VAL(header->num_samples_per_block, header->num_samples - progress);
+      = IMAADPCM_MIN_VAL(header->num_samples_per_block, header->num_samples - progress);
     /* サンプル書き出し位置のセット */
     for (ch = 0; ch < header->num_channels; ch++) {
       buffer_ptr[ch] = &buffer[ch][progress];
@@ -450,7 +455,7 @@ IMAADPCMWAVApiResult IMAADPCMWAVDecoder_DecodeWhole(
             num_decode_samples, &read_size);
         break;
       default:
-        return IMAADPCMWAV_APIRESULT_INVALID_FORMAT;
+        return IMAADPCM_APIRESULT_INVALID_FORMAT;
     }
 
     /* 進捗更新 */
@@ -461,6 +466,5 @@ IMAADPCMWAVApiResult IMAADPCMWAVDecoder_DecodeWhole(
   }
 
   /* 成功終了 */
-  (*output_num_samples) = progress;
-  return IMAADPCMWAV_APIRESULT_OK;
+  return IMAADPCM_APIRESULT_OK;
 }
