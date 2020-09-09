@@ -58,9 +58,9 @@ static int do_decode(const char *adpcm_filename, const char *decoded_filename)
   }
 
   /* 全データをデコード */
-  if (IMAADPCMWAVDecoder_DecodeWhole(decoder, 
+  if ((ret = IMAADPCMWAVDecoder_DecodeWhole(decoder, 
         buffer, buffer_size, output, 
-        header.num_channels, header.num_samples) != IMAADPCM_APIRESULT_OK) {
+        header.num_channels, header.num_samples)) != IMAADPCM_APIRESULT_OK) {
     fprintf(stderr, "Failed to decode. API result: %d \n", ret);
     return 1;
   }

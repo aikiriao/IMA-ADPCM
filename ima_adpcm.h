@@ -4,10 +4,10 @@
 #include <stdint.h>
 
 /* 処理可能な最大チャンネル数 */
-#define IMAADPCM_MAX_NUM_CHANNELS 2
+#define IMAADPCM_MAX_NUM_CHANNELS       2
 
 /* サンプルあたりビット数は4で固定 */
-#define IMAADPCM_BITS_PER_SAMPLE  4
+#define IMAADPCM_BITS_PER_SAMPLE        4
 
 /* API結果型 */
 typedef enum IMAADPCMApiResultTag {
