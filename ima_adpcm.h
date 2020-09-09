@@ -14,8 +14,6 @@ typedef enum IMAADPCMApiResultTag {
   IMAADPCM_APIRESULT_OK = 0,              /* 成功                         */
   IMAADPCM_APIRESULT_INVALID_ARGUMENT,    /* 無効な引数                   */
   IMAADPCM_APIRESULT_INVALID_FORMAT,      /* 不正なフォーマット           */
-  /* FIXME: BUFFER, DATAの使い方がごっちゃになってるかも
-   * BUFFERは出力側（受け）のデータバッファ、DATAは入力のデータ */
   IMAADPCM_APIRESULT_INSUFFICIENT_BUFFER, /* バッファサイズが足りない     */
   IMAADPCM_APIRESULT_INSUFFICIENT_DATA,   /* データが足りない             */
   IMAADPCM_APIRESULT_PARAMETER_NOT_SET,   /* パラメータがセットされてない */
