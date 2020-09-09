@@ -6,6 +6,9 @@
 /* 処理可能な最大チャンネル数 */
 #define IMAADPCM_MAX_NUM_CHANNELS 2
 
+/* サンプルあたりビット数は4で固定 */
+#define IMAADPCM_BITS_PER_SAMPLE  4
+
 /* API結果型 */
 typedef enum IMAADPCMApiResultTag {
   IMAADPCM_APIRESULT_OK = 0,              /* 成功                         */

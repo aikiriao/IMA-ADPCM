@@ -646,7 +646,7 @@ IMAADPCMApiResult IMAADPCMWAVEncoder_EncodeHeader(
   /* WAVEフォーマットタイプ: IMA-ADPCM(17)で決め打ち */
   ByteArray_PutUint16LE(data_pos, 17);
   /* チャンネル数 */
-  if (header_info->num_channels > 2) {
+  if (header_info->num_channels > IMAADPCM_MAX_NUM_CHANNELS) {
     return IMAADPCM_APIRESULT_INVALID_FORMAT;
   }
   ByteArray_PutUint16LE(data_pos, header_info->num_channels);
@@ -657,7 +657,7 @@ IMAADPCMApiResult IMAADPCMWAVEncoder_EncodeHeader(
   /* ブロックサイズ */
   ByteArray_PutUint16LE(data_pos, header_info->block_size);
   /* サンプルあたりビット数: 4で決め打ち */
-  if (header_info->bits_per_sample != 4) {
+  if (header_info->bits_per_sample != IMAADPCM_BITS_PER_SAMPLE) {
     return IMAADPCM_APIRESULT_INVALID_FORMAT;
   }
   ByteArray_PutUint16LE(data_pos, header_info->bits_per_sample);
@@ -968,7 +968,7 @@ static IMAADPCMError IMAADPCMWAVEncoder_ConvertParameterToHeader(
   }
 
   /* サンプルあたりビット数は4固定 */
-  if (enc_param->bits_per_sample != 4) {
+  if (enc_param->bits_per_sample != IMAADPCM_BITS_PER_SAMPLE) {
     return IMAADPCM_ERROR_INVALID_FORMAT;
   }
 
