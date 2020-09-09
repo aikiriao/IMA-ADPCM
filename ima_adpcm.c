@@ -356,7 +356,7 @@ static IMAADPCMError IMAADPCMWAVDecoder_DecodeBlockMono(
 
   /* 引数チェック */
   if ((core_decoder == NULL) || (read_pos == NULL)
-      || (buffer == NULL) || (read_size == NULL)) {
+      || (buffer == NULL) || (buffer[0] == NULL) || (read_size == NULL)) {
     return IMAADPCM_ERROR_INVALID_ARGUMENT;
   }
 
@@ -375,7 +375,9 @@ static IMAADPCMError IMAADPCMWAVDecoder_DecodeBlockMono(
   ByteArray_GetUint16LE(read_pos, (uint16_t *)&(core_decoder->sample_val));
   ByteArray_GetUint8(read_pos, (uint8_t *)&(core_decoder->stepsize_index));
   ByteArray_GetUint8(read_pos, &u8buf); /* reserved */
-  assert(u8buf == 0);
+  if (u8buf != 0) {
+    return IMAADPCM_ERROR_INVALID_FORMAT;
+  }
 
   /* 先頭サンプルはヘッダに入っている */
   buffer[0][0] = core_decoder->sample_val;
@@ -430,7 +432,9 @@ static IMAADPCMError IMAADPCMWAVDecoder_DecodeBlockStereo(
     ByteArray_GetUint16LE(read_pos, (uint16_t *)&(core_decoder[ch].sample_val));
     ByteArray_GetUint8(read_pos, (uint8_t *)&(core_decoder[ch].stepsize_index));
     ByteArray_GetUint8(read_pos, &reserved);
-    assert(reserved == 0);
+    if (reserved != 0) {
+      return IMAADPCM_ERROR_INVALID_FORMAT;
+    }
   }
 
   /* 最初のサンプルの取得 */
@@ -886,14 +890,14 @@ static IMAADPCMError IMAADPCMWAVEncoder_EncodeBlockStereo(
       nibble[7] = IMAADPCMCoreEncoder_EncodeSample(&(core_encoder[ch]), input[ch][smpl + 7]);
       assert((nibble[0] <= 0xF) && (nibble[1] <= 0xF) && (nibble[2] <= 0xF) && (nibble[3] <= 0xF)
           && (nibble[4] <= 0xF) && (nibble[5] <= 0xF) && (nibble[6] <= 0xF) && (nibble[7] <= 0xF));
-      u32buf  = (uint8_t)(nibble[0] <<  0);
-      u32buf |= (uint8_t)(nibble[1] <<  4);
-      u32buf |= (uint8_t)(nibble[2] <<  8);
-      u32buf |= (uint8_t)(nibble[3] << 12);
-      u32buf |= (uint8_t)(nibble[4] << 16);
-      u32buf |= (uint8_t)(nibble[5] << 20);
-      u32buf |= (uint8_t)(nibble[6] << 24);
-      u32buf |= (uint8_t)(nibble[7] << 28);
+      u32buf  = (uint32_t)(nibble[0] <<  0);
+      u32buf |= (uint32_t)(nibble[1] <<  4);
+      u32buf |= (uint32_t)(nibble[2] <<  8);
+      u32buf |= (uint32_t)(nibble[3] << 12);
+      u32buf |= (uint32_t)(nibble[4] << 16);
+      u32buf |= (uint32_t)(nibble[5] << 20);
+      u32buf |= (uint32_t)(nibble[6] << 24);
+      u32buf |= (uint32_t)(nibble[7] << 28);
       ByteArray_PutUint32LE(data_pos, u32buf);
     }
   }

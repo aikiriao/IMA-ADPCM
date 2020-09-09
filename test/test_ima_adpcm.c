@@ -234,22 +234,26 @@ static uint8_t testIMAADPCMDecoder_CheckDecodeResult(const char *adpcm_filename,
   fread(data, sizeof(uint8_t), data_size, fp);
   fclose(fp);
 
+  /* ヘッダデコード */
+  if (IMAADPCMWAVDecoder_DecodeHeader(data, data_size, &header) != IMAADPCM_APIRESULT_OK) {
+    free(data);
+    return 0;
+  }
+
+  /* リソース確保 */
   wavfile = WAV_CreateFromFile(decodedwav_filename);
   assert(wavfile != NULL);
-
-  /* ヘッダデコード */
-  Test_AssertEqual(IMAADPCMWAVDecoder_DecodeHeader(data, data_size, &header), IMAADPCM_APIRESULT_OK);
-
-  /* 出力領域確保 */
   for (ch = 0; ch < header.num_channels; ch++) {
     output[ch] = malloc(sizeof(int16_t) * header.num_samples);
   }
   decoder = IMAADPCMWAVDecoder_Create(NULL, 0);
 
   /* デコード実行 */
-  Test_AssertEqual(
-      IMAADPCMWAVDecoder_DecodeWhole(decoder,
-        data, data_size, output, header.num_channels, header.num_samples), IMAADPCM_APIRESULT_OK);
+  if (IMAADPCMWAVDecoder_DecodeWhole(decoder,
+        data, data_size, output, header.num_channels, header.num_samples) != IMAADPCM_APIRESULT_OK) {
+    is_ok = 0;
+    goto CHECK_END;
+  }
 
   /* ffmpegでデコードしたものと一致するか？ */
   is_ok = 1;
@@ -452,6 +456,116 @@ static void testIMAADPCMWAVEncoder_SetEncodeParameterTest(void *obj)
   }
 }
 
+/* エンコード→デコードテスト 成功時は1, 失敗時は0を返す */
+static uint8_t testIMAADPCMWAVEncoder_EncodeDecodeTest(
+    const char *wav_filename, uint16_t bits_per_sample, uint16_t block_size, double rms_epsilon)
+{
+  struct WAVFile *wavfile;
+  struct stat fstat;
+  int16_t *input[IMAADPCM_MAX_NUM_CHANNELS];
+  int16_t *decoded[IMAADPCM_MAX_NUM_CHANNELS];
+  uint8_t is_ok;
+  uint32_t ch, smpl, buffer_size, output_size;
+  uint32_t num_channels, num_samples;
+  uint8_t *buffer;
+  double rms_error;
+  struct IMAADPCMWAVEncodeParameter enc_param;
+  struct IMAADPCMWAVEncoder *encoder;
+  struct IMAADPCMWAVDecoder *decoder;
+
+  assert((wav_filename != NULL) && (rms_epsilon >= 0.0f));
+
+  /* 入力wav取得 */
+  wavfile = WAV_CreateFromFile(wav_filename);
+  assert(wavfile != NULL);
+  num_channels = wavfile->format.num_channels;
+  num_samples = wavfile->format.num_samples;
+
+  /* 出力データの領域割当て */
+  for (ch = 0; ch < num_channels; ch++) {
+    input[ch]   = malloc(sizeof(int16_t) * num_samples);
+    decoded[ch] = malloc(sizeof(int16_t) * num_samples);
+  }
+  /* 入力wavと同じサイズの出力領域を確保（増えることはないと期待） */
+  stat(wav_filename, &fstat);
+  buffer_size = fstat.st_size;
+  buffer = malloc(buffer_size);
+
+  /* 16bit幅でデータ取得 */
+  for (ch = 0; ch < num_channels; ch++) {
+    for (smpl = 0; smpl < num_samples; smpl++) {
+      input[ch][smpl] = WAVFile_PCM(wavfile, smpl, ch) >> 16;
+    }
+  }
+
+  /* ハンドル作成 */
+  encoder = IMAADPCMWAVEncoder_Create(NULL, 0);
+  decoder = IMAADPCMWAVDecoder_Create(NULL, 0);
+
+  /* エンコードパラメータをセット */
+  enc_param.num_channels    = num_channels;
+  enc_param.sampling_rate   = wavfile->format.sampling_rate;
+  enc_param.bits_per_sample = bits_per_sample;
+  enc_param.block_size      = block_size;
+  if (IMAADPCMWAVEncoder_SetEncodeParameter(encoder, &enc_param) != IMAADPCM_APIRESULT_OK) {
+    is_ok = 0;
+    goto CHECK_END;
+  }
+
+  /* エンコード */
+  if (IMAADPCMWAVEncoder_EncodeWhole(
+        encoder, (const int16_t *const *)input, num_samples,
+        buffer, buffer_size, &output_size) != IMAADPCM_APIRESULT_OK) {
+    is_ok = 0;
+    goto CHECK_END;
+  }
+  /* 半分以下にはなるはず */
+  if (output_size >= (buffer_size / 2)) {
+    is_ok = 0;
+    goto CHECK_END;
+  }
+
+  /* デコード */
+  if (IMAADPCMWAVDecoder_DecodeWhole(
+        decoder, buffer, output_size,
+        decoded, num_channels, num_samples) != IMAADPCM_APIRESULT_OK) {
+    is_ok = 0;
+    goto CHECK_END;
+  }
+
+  /* ロスがあるのでRMSE基準でチェック */
+  rms_error = 0.0;
+  for (ch = 0; ch < num_channels; ch++) {
+    for (smpl = 0; smpl < num_samples; smpl++) {
+      double pcm1, pcm2, abs_error;
+      pcm1 = (double)input[ch][smpl] / INT16_MAX;
+      pcm2 = (double)decoded[ch][smpl] / INT16_MAX;
+      abs_error = fabs(pcm1 - pcm2);
+      rms_error += abs_error * abs_error;
+    }
+  }
+  rms_error = sqrt(rms_error / (num_samples * num_channels));
+
+  /* マージンチェック */
+  if (rms_error < rms_epsilon) {
+    is_ok = 1;
+  } else {
+    is_ok = 0;
+  }
+
+CHECK_END:
+  /* 領域開放 */
+  IMAADPCMWAVEncoder_Destroy(encoder);
+  IMAADPCMWAVDecoder_Destroy(decoder);
+  free(buffer);
+  for (ch = 0; ch < num_channels; ch++) {
+    free(input[ch]);
+    free(decoded[ch]);
+  }
+
+  return is_ok;
+}
+
 /* エンコードテスト */
 static void testIMAADPCMWAVDecoder_EncodeTest(void *obj)
 {
@@ -463,8 +577,9 @@ static void testIMAADPCMWAVDecoder_EncodeTest(void *obj)
 #define NUM_SAMPLES   1024
     int16_t *input[IMAADPCM_MAX_NUM_CHANNELS];
     int16_t *decoded[IMAADPCM_MAX_NUM_CHANNELS];
-    uint32_t ch, smpl, buffer_size, output_size, is_ok;
+    uint32_t ch, smpl, buffer_size, output_size;
     uint8_t *buffer;
+    double rms_error;
     struct IMAADPCMWAVEncodeParameter enc_param;
     struct IMAADPCMWAVEncoder *encoder;
     struct IMAADPCMWAVDecoder *decoder;
@@ -478,11 +593,10 @@ static void testIMAADPCMWAVDecoder_EncodeTest(void *obj)
     buffer_size = NUM_CHANNELS * NUM_SAMPLES * sizeof(int16_t);
     buffer = malloc(buffer_size);
 
-    /* データ作成: 単位インパルス */
+    /* データ作成: 正弦波 */
     for (ch = 0; ch < NUM_CHANNELS; ch++) {
-      input[ch][0] = INT16_MAX;
       for (smpl = 1; smpl < NUM_SAMPLES; smpl++) {
-        input[ch][smpl] = 0;
+        input[ch][smpl] = (int16_t)(INT16_MAX * sin((2.0 * 3.1415 * 440.0 * smpl) / 48000.0));
       }
     }
 
@@ -502,6 +616,7 @@ static void testIMAADPCMWAVDecoder_EncodeTest(void *obj)
         IMAADPCMWAVEncoder_EncodeWhole(
           encoder, (const int16_t *const *)input, NUM_SAMPLES,
           buffer, buffer_size, &output_size), IMAADPCM_APIRESULT_OK);
+    /* 半分以下にはなるはず */
     Test_AssertCondition(output_size < (buffer_size / 2));
 
     /* デコード */
@@ -510,66 +625,141 @@ static void testIMAADPCMWAVDecoder_EncodeTest(void *obj)
           decoder, buffer, output_size,
           decoded, NUM_CHANNELS, NUM_SAMPLES), IMAADPCM_APIRESULT_OK);
 
-    /* ロスがあるのでマージンを設けて比較 */
-    is_ok = 1;
+    /* ロスがあるのでRMSE基準でチェック */
+    rms_error = 0.0;
     for (ch = 0; ch < NUM_CHANNELS; ch++) {
       for (smpl = 0; smpl < NUM_SAMPLES; smpl++) {
-        double pcm1, pcm2;
+        double pcm1, pcm2, abs_error;
         pcm1 = (double)input[ch][smpl] / INT16_MAX;
         pcm2 = (double)decoded[ch][smpl] / INT16_MAX;
-        if (fabs(pcm1 - pcm2) > 1.0e-2) {
-          printf("%d %d %d vs %d \n", ch, smpl, input[ch][smpl], decoded[ch][smpl]);
-          is_ok = 0;
-          goto CHECK_END;
-        }
+        abs_error = fabs(pcm1 - pcm2);
+        rms_error += abs_error * abs_error;
       }
     }
+    rms_error = sqrt(rms_error / (NUM_SAMPLES * NUM_CHANNELS));
 
-CHECK_END:
-    Test_AssertEqual(is_ok, 1);
+    /* 経験的に0.05 */
+    Test_AssertCondition(rms_error < 5.0e-2);
+
     /* 領域開放 */
     IMAADPCMWAVEncoder_Destroy(encoder);
     IMAADPCMWAVDecoder_Destroy(decoder);
     free(buffer);
     for (ch = 0; ch < NUM_CHANNELS; ch++) {
       free(input[ch]);
+      free(decoded[ch]);
     }
+#undef NUM_CHANNELS
+#undef NUM_SAMPLES
   }
 
-#if 0
   {
-    const char test_filename[] = "sin300Hz_mono.wav";
+    const char test_filename[] = "unit_impulse.wav";
     struct WAVFile *wavfile;
     struct stat fstat;
     int16_t *input[IMAADPCM_MAX_NUM_CHANNELS];
-    uint32_t ch, smpl;
-    uint8_t *output;
+    int16_t *decoded[IMAADPCM_MAX_NUM_CHANNELS];
+    uint32_t ch, smpl, buffer_size, output_size;
+    uint32_t num_channels, num_samples;
+    uint8_t *buffer;
+    double rms_error;
+    struct IMAADPCMWAVEncodeParameter enc_param;
+    struct IMAADPCMWAVEncoder *encoder;
+    struct IMAADPCMWAVDecoder *decoder;
 
     /* 入力wav取得 */
     wavfile = WAV_CreateFromFile(test_filename);
+    num_channels = wavfile->format.num_channels;
+    num_samples = wavfile->format.num_samples;
+
     /* 出力データの領域割当て */
-    for (ch = 0; ch < wavfile->format.num_channels; ch++) {
-      input[ch] = malloc(sizeof(int16_t) * wavfile->format.num_samples);
+    for (ch = 0; ch < num_channels; ch++) {
+      input[ch]   = malloc(sizeof(int16_t) * num_samples);
+      decoded[ch] = malloc(sizeof(int16_t) * num_samples);
     }
     /* 入力wavと同じサイズの出力領域を確保（増えることはないと期待） */
     stat(test_filename, &fstat);
-    output = malloc(fstat.st_size);
+    buffer_size = fstat.st_size;
+    buffer = malloc(buffer_size);
 
     /* 16bit幅でデータ取得 */
-    for (ch = 0; ch < wavfile->format.num_channels; ch++) {
-      for (smpl = 0; smpl < wavfile->format.num_samples; smpl++) {
+    for (ch = 0; ch < num_channels; ch++) {
+      for (smpl = 0; smpl < num_samples; smpl++) {
         input[ch][smpl] = WAVFile_PCM(wavfile, smpl, ch) >> 16;
       }
     }
 
-    /* 領域開放 */
-    free(output);
-    for (ch = 0; ch < wavfile->format.num_channels; ch++) {
-      free(input[ch]);
+    /* ハンドル作成 */
+    encoder = IMAADPCMWAVEncoder_Create(NULL, 0);
+    decoder = IMAADPCMWAVDecoder_Create(NULL, 0);
+
+    /* エンコードパラメータをセット */
+    enc_param.num_channels    = num_channels;
+    enc_param.sampling_rate   = wavfile->format.sampling_rate;
+    enc_param.bits_per_sample = 4;
+    enc_param.block_size      = 256;
+    Test_AssertEqual(IMAADPCMWAVEncoder_SetEncodeParameter(encoder, &enc_param), IMAADPCM_APIRESULT_OK);
+
+    /* エンコード */
+    Test_AssertEqual(
+        IMAADPCMWAVEncoder_EncodeWhole(
+          encoder, (const int16_t *const *)input, num_samples,
+          buffer, buffer_size, &output_size), IMAADPCM_APIRESULT_OK);
+    /* 半分以下にはなるはず */
+    Test_AssertCondition(output_size < (buffer_size / 2));
+
+    /* デコード */
+    Test_AssertEqual(
+        IMAADPCMWAVDecoder_DecodeWhole(
+          decoder, buffer, output_size,
+          decoded, num_channels, num_samples), IMAADPCM_APIRESULT_OK);
+
+    /* ロスがあるのでRMSE基準でチェック */
+    rms_error = 0.0;
+    for (ch = 0; ch < num_channels; ch++) {
+      for (smpl = 0; smpl < num_samples; smpl++) {
+        double pcm1, pcm2, abs_error;
+        pcm1 = (double)input[ch][smpl] / INT16_MAX;
+        pcm2 = (double)decoded[ch][smpl] / INT16_MAX;
+        abs_error = fabs(pcm1 - pcm2);
+        rms_error += abs_error * abs_error;
+      }
     }
-    WAV_Destroy(wavfile);
+    rms_error = sqrt(rms_error / (num_samples * num_channels));
+
+    /* 経験的に0.05 */
+    Test_AssertCondition(rms_error < 5.0e-2);
+
+    /* 領域開放 */
+    IMAADPCMWAVEncoder_Destroy(encoder);
+    IMAADPCMWAVDecoder_Destroy(decoder);
+    free(buffer);
+    for (ch = 0; ch < num_channels; ch++) {
+      free(input[ch]);
+      free(decoded[ch]);
+    }
   }
-#endif
+
+  /* エンコードデコードテスト */
+  {
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("unit_impulse_mono.wav", 4,  128, 5.0e-2), 1);
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("unit_impulse_mono.wav", 4,  256, 5.0e-2), 1);
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("unit_impulse_mono.wav", 4,  512, 5.0e-2), 1);
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("unit_impulse_mono.wav", 4, 1024, 5.0e-2), 1);
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("unit_impulse.wav",      4,  128, 5.0e-2), 1);
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("unit_impulse.wav",      4,  256, 5.0e-2), 1);
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("unit_impulse.wav",      4,  512, 5.0e-2), 1);
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("unit_impulse.wav",      4, 1024, 5.0e-2), 1);
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("sin300Hz_mono.wav",     4,  128, 5.0e-2), 1);
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("sin300Hz_mono.wav",     4,  256, 5.0e-2), 1);
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("sin300Hz_mono.wav",     4,  512, 5.0e-2), 1);
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("sin300Hz_mono.wav",     4, 1024, 5.0e-2), 1);
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("sin300Hz.wav",          4,  128, 5.0e-2), 1);
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("sin300Hz.wav",          4,  256, 5.0e-2), 1);
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("sin300Hz.wav",          4,  512, 5.0e-2), 1);
+    Test_AssertEqual(testIMAADPCMWAVEncoder_EncodeDecodeTest("sin300Hz.wav",          4, 1024, 5.0e-2), 1);
+  }
+
 }
 
 void testIMAADPCM_Setup(void)
