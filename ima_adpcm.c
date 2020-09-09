@@ -993,6 +993,8 @@ static IMAADPCMError IMAADPCMWAVEncoder_ConvertParameterToHeader(
   assert((block_data_size * 8) % (enc_param->bits_per_sample * enc_param->num_channels) == 0);
   assert((enc_param->bits_per_sample * enc_param->num_channels) != 0);
   tmp_header.num_samples_per_block = (uint16_t)((block_data_size * 8) / (enc_param->bits_per_sample * enc_param->num_channels));
+  /* ヘッダに入っている分+1 */
+  tmp_header.num_samples_per_block += 1;
   assert(tmp_header.num_samples_per_block != 0);
   tmp_header.bytes_per_sec = (enc_param->block_size * enc_param->sampling_rate) / tmp_header.num_samples_per_block;
 
