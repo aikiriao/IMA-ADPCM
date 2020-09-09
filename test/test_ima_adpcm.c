@@ -39,7 +39,7 @@ static void testIMAADPCM_HeaderEncodeDecodeTest(void *obj)
   header__p->sampling_rate          = 44100;                          \
   header__p->bytes_per_sec          = 89422;                          \
   header__p->block_size             = 256;                            \
-  header__p->bits_per_sample        = 4;                              \
+  header__p->bits_per_sample        = IMAADPCM_BITS_PER_SAMPLE;       \
   header__p->num_samples_per_block  = 505;                            \
   header__p->num_samples            = 1024;                           \
   header__p->header_size            = IMAADPCMWAVENCODER_HEADER_SIZE; \
@@ -116,10 +116,11 @@ static void testIMAADPCM_HeaderEncodeDecodeTest(void *obj)
     memcpy(data, valid_data, sizeof(valid_data));
     data[12] = 'a';
     Test_AssertEqual(IMAADPCMWAVDecoder_DecodeHeader(data, sizeof(data), &getheader), IMAADPCM_APIRESULT_INVALID_FORMAT);
-    /* factの破壊 */
+    /* factの破壊はスキップ: factチャンクはオプショナルだから
     memcpy(data, valid_data, sizeof(valid_data));
     data[40] = 'a';
     Test_AssertEqual(IMAADPCMWAVDecoder_DecodeHeader(data, sizeof(data), &getheader), IMAADPCM_APIRESULT_INVALID_FORMAT);
+    */
     /* dataの破壊: dataチャンクが見つけられない */
     memcpy(data, valid_data, sizeof(valid_data));
     data[52] = 'a';
@@ -316,6 +317,39 @@ static void testIMAADPCMWAVDecoder_DecodeTest(void *obj)
     free(data);
   }
 
+  /* 実データのヘッダデコード（factチャンクがないwav） */
+  {
+    const char  test_filename[] = "bunny1im.wav";
+    FILE        *fp;
+    uint8_t     *data;
+    struct stat fstat;
+    uint32_t    data_size;
+    struct IMAADPCMWAVHeaderInfo header;
+
+    /* データロード */
+    fp = fopen(test_filename, "rb");
+    assert(fp != NULL);
+    stat(test_filename, &fstat);
+    data_size = (uint32_t)fstat.st_size;
+    data = (uint8_t *)malloc(data_size);
+    fread(data, sizeof(uint8_t), data_size, fp);
+    fclose(fp);
+
+    /* ヘッダデコード */
+    Test_AssertEqual(IMAADPCMWAVDecoder_DecodeHeader(data, data_size, &header), IMAADPCM_APIRESULT_OK);
+
+    /* 想定した内容になっているか */
+    Test_AssertEqual(header.num_channels,           1     );
+    Test_AssertEqual(header.sampling_rate,          8000  );
+    Test_AssertEqual(header.bytes_per_sec,          4064  );
+    Test_AssertEqual(header.block_size,             256   );
+    Test_AssertEqual(header.num_samples_per_block,  505   );
+    Test_AssertEqual(header.num_samples,            187860);
+    Test_AssertEqual(header.header_size,            48    );
+
+    free(data);
+  }
+
   /* 実データのデータデコード一致確認 */
   {
     Test_AssertEqual(
@@ -408,7 +442,7 @@ static void testIMAADPCMWAVEncoder_SetEncodeParameterTest(void *obj)
     struct IMAADPCMWAVEncodeParameter *p__param = p_param;  \
     p__param->num_channels    = 1;                          \
     p__param->sampling_rate   = 8000;                       \
-    p__param->bits_per_sample = 4;                          \
+    p__param->bits_per_sample = IMAADPCM_BITS_PER_SAMPLE;   \
     p__param->block_size      = 256;                        \
 }
 
@@ -607,7 +641,7 @@ static void testIMAADPCMWAVDecoder_EncodeTest(void *obj)
     /* エンコードパラメータをセット */
     enc_param.num_channels    = NUM_CHANNELS;
     enc_param.sampling_rate   = 8000;
-    enc_param.bits_per_sample = 4;
+    enc_param.bits_per_sample = IMAADPCM_BITS_PER_SAMPLE;
     enc_param.block_size      = 256;
     Test_AssertEqual(IMAADPCMWAVEncoder_SetEncodeParameter(encoder, &enc_param), IMAADPCM_APIRESULT_OK);
 
