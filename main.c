@@ -7,7 +7,7 @@
 #include <sys/stat.h>
 
 /* バージョン文字列 */
-#define IMAADPCMCUI_VERSION_STRING  "1.0.0"
+#define IMAADPCMCUI_VERSION_STRING  "1.1.0"
 
 /* ブロックサイズ 今の所1024で固定 */
 #define IMAADPCMCUI_BLOCK_SIZE      256
@@ -177,15 +177,109 @@ static int do_encode(const char *wav_file, const char *encoded_filename)
   return 0;
 }
 
+/* 残差出力処理 */
+static int do_residual_output(const char *wav_file, const char *residual_filename)
+{
+  struct WAVFile                    *wavfile;
+  struct stat                       fstat;
+  int16_t                           *pcmdata[IMAADPCM_MAX_NUM_CHANNELS];
+  uint32_t                          ch, smpl, buffer_size, output_size;
+  uint32_t                          num_channels, num_samples;
+  uint8_t                           *buffer;
+  struct IMAADPCMWAVEncodeParameter enc_param;
+  struct IMAADPCMWAVEncoder         *encoder;
+  struct IMAADPCMWAVDecoder         *decoder;
+  IMAADPCMApiResult                 api_result;
+
+  /* 入力wav取得 */
+  wavfile = WAV_CreateFromFile(wav_file);
+  if (wavfile == NULL) {
+    fprintf(stderr, "Failed to open %s. \n", wav_file);
+    return 1;
+  }
+
+  num_channels = wavfile->format.num_channels;
+  num_samples = wavfile->format.num_samples;
+
+  /* 出力データの領域割当て */
+  for (ch = 0; ch < num_channels; ch++) {
+    pcmdata[ch] = malloc(sizeof(int16_t) * num_samples);
+  }
+  /* 入力wavと同じサイズの出力領域を確保（増えることはないと期待） */
+  stat(wav_file, &fstat);
+  buffer_size = (uint32_t)fstat.st_size;
+  buffer = malloc(buffer_size);
+
+  /* 16bit幅でデータ取得 */
+  for (ch = 0; ch < num_channels; ch++) {
+    for (smpl = 0; smpl < num_samples; smpl++) {
+      pcmdata[ch][smpl] = (WAVFile_PCM(wavfile, smpl, ch) >> 16);
+    }
+  }
+
+  /* ハンドル作成 */
+  encoder = IMAADPCMWAVEncoder_Create(NULL, 0);
+  decoder = IMAADPCMWAVDecoder_Create(NULL, 0);
+
+  /* エンコードパラメータをセット */
+  enc_param.num_channels    = (uint16_t)num_channels;
+  enc_param.sampling_rate   = wavfile->format.sampling_rate;
+  enc_param.bits_per_sample = 4;
+  enc_param.block_size      = IMAADPCMCUI_BLOCK_SIZE;
+  if ((api_result = IMAADPCMWAVEncoder_SetEncodeParameter(encoder, &enc_param))
+      != IMAADPCM_APIRESULT_OK) {
+    fprintf(stderr, "Failed to set encode parameter. API result:%d \n", api_result);
+    return 1;
+  }
+
+  /* エンコード */
+  if ((api_result = IMAADPCMWAVEncoder_EncodeWhole(
+        encoder, (const int16_t *const *)pcmdata, num_samples,
+        buffer, buffer_size, &output_size)) != IMAADPCM_APIRESULT_OK) {
+    fprintf(stderr, "Failed to encode. API result:%d \n", api_result);
+    return 1;
+  }
+
+  /* そのままデコード */
+  if ((api_result = IMAADPCMWAVDecoder_DecodeWhole(decoder, 
+        buffer, output_size, pcmdata, num_channels, num_samples)) != IMAADPCM_APIRESULT_OK) {
+    fprintf(stderr, "Failed to decode. API result: %d \n", api_result);
+    return 1;
+  }
+
+  /* 残差（量子化誤差）計算 */
+  for (ch = 0; ch < num_channels; ch++) {
+    for (smpl = 0; smpl < num_samples; smpl++) {
+      int32_t decoded = pcmdata[ch][smpl] << 16;
+      WAVFile_PCM(wavfile, smpl, ch) -= decoded;
+    }
+  }
+
+  /* 残差をファイルに書き出し */
+  WAV_WriteToFile(residual_filename, wavfile);
+
+  /* 領域開放 */
+  IMAADPCMWAVEncoder_Destroy(encoder);
+  IMAADPCMWAVDecoder_Destroy(decoder);
+  free(buffer);
+  for (ch = 0; ch < num_channels; ch++) {
+    free(pcmdata[ch]);
+  }
+  WAV_Destroy(wavfile);
+
+  return 0;
+}
+
 /* 使用法の印字 */
 static void print_usage(const char* program_name)
 {
   printf(
-    "IMA-ADPCM encoder/decoder Version." IMAADPCMCUI_VERSION_STRING "\n" \
-    "Usage: %s -[ed] INPUT.wav OUTPUT.wav \n" \
-    "-e: encode mode (PCM wav -> IMA-ADPCM wav)\n" \
-    "-d: decode mode (IMA-ADPCM wav -> PCM wav)\n",
-    program_name);
+      "IMA-ADPCM encoder/decoder Version." IMAADPCMCUI_VERSION_STRING "\n" \
+      "Usage: %s -[ed] INPUT.wav OUTPUT.wav \n" \
+      "-e: encode mode (PCM wav -> IMA-ADPCM wav)\n" \
+      "-d: decode mode (IMA-ADPCM wav -> PCM wav)\n" \
+      "-r: output residual (PCM wav -> Residual PCM wav)\n", 
+      program_name);
 }
 
 /* メインエントリ */
@@ -217,6 +311,8 @@ int main(int argc, char **argv)
     ret = do_encode(in_filename, out_filename);
   } else if (strncmp(option, "-d", 2) == 0) {
     ret = do_decode(in_filename, out_filename);
+  } else if (strncmp(option, "-r", 2) == 0) {
+    ret = do_residual_output(in_filename, out_filename);
   } else {
     print_usage(argv[0]);
     return 1;

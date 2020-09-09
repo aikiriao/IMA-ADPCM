@@ -779,7 +779,7 @@ static uint8_t IMAADPCMCoreEncoder_EncodeSample(
   delta = nibble & 7;
   qdiff = (stepsize * ((delta << 1) + 1)) >> 3;
 
-  /* TODO: ここで量子化誤差が出る。観察から始める */
+  /* ここで量子化誤差が出る */
   /* printf("%d \n", sign ? (-qdiff - diff) : (qdiff - diff)); */
 
   /* 量子化した差分を加える */
