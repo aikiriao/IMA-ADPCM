@@ -452,6 +452,8 @@ static IMAADPCMError IMAADPCMWAVDecoder_DecodeBlockStereo(
 
   /* ブロックデータデコード */
   for (smpl = 1; smpl < tmp_num_decode_samples; smpl += 8) {
+    uint32_t smp;
+    int16_t  buf[8];
     for (ch = 0; ch < 2; ch++) {
       assert((uint32_t)(read_pos - read_head) < data_size);
       ByteArray_GetUint32LE(read_pos, &u32buf);
@@ -464,14 +466,18 @@ static IMAADPCMError IMAADPCMWAVDecoder_DecodeBlockStereo(
       nibble[6] = (u32buf >> 24) & 0xF;
       nibble[7] = (u32buf >> 28) & 0xF;
 
-      buffer[ch][smpl + 0] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[0]);
-      buffer[ch][smpl + 1] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[1]);
-      buffer[ch][smpl + 2] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[2]);
-      buffer[ch][smpl + 3] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[3]);
-      buffer[ch][smpl + 4] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[4]);
-      buffer[ch][smpl + 5] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[5]);
-      buffer[ch][smpl + 6] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[6]);
-      buffer[ch][smpl + 7] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[7]);
+      /* サンプル数が 1 + (8の倍数) でない場合があるため、一旦バッファに受ける */
+      buf[0] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[0]);
+      buf[1] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[1]);
+      buf[2] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[2]);
+      buf[3] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[3]);
+      buf[4] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[4]);
+      buf[5] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[5]);
+      buf[6] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[6]);
+      buf[7] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[7]);
+      for (smp = 0; (smp < 8) && ((smpl + smp) < tmp_num_decode_samples); smp++) {
+        buffer[ch][smpl + smp] = buf[smp];
+      }
     }
   }
 
