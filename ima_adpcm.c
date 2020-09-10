@@ -333,7 +333,7 @@ static int16_t IMAADPCMCoreDecoder_DecodeSample(
   stepsize = IMAADPCM_stepsize_table[idx];
 
   /* インデックス更新 */
-  idx += IMAADPCM_index_table[nibble];
+  idx = (int8_t)(idx + IMAADPCM_index_table[nibble]);
   idx = IMAADPCM_INNER_VAL(idx, 0, 88);
 
   /* 差分算出 */
@@ -457,14 +457,14 @@ static IMAADPCMError IMAADPCMWAVDecoder_DecodeBlockStereo(
     for (ch = 0; ch < 2; ch++) {
       assert((uint32_t)(read_pos - read_head) < data_size);
       ByteArray_GetUint32LE(read_pos, &u32buf);
-      nibble[0] = (u32buf >>  0) & 0xF;
-      nibble[1] = (u32buf >>  4) & 0xF;
-      nibble[2] = (u32buf >>  8) & 0xF;
-      nibble[3] = (u32buf >> 12) & 0xF;
-      nibble[4] = (u32buf >> 16) & 0xF;
-      nibble[5] = (u32buf >> 20) & 0xF;
-      nibble[6] = (u32buf >> 24) & 0xF;
-      nibble[7] = (u32buf >> 28) & 0xF;
+      nibble[0] = (uint8_t)((u32buf >>  0) & 0xF);
+      nibble[1] = (uint8_t)((u32buf >>  4) & 0xF);
+      nibble[2] = (uint8_t)((u32buf >>  8) & 0xF);
+      nibble[3] = (uint8_t)((u32buf >> 12) & 0xF);
+      nibble[4] = (uint8_t)((u32buf >> 16) & 0xF);
+      nibble[5] = (uint8_t)((u32buf >> 20) & 0xF);
+      nibble[6] = (uint8_t)((u32buf >> 24) & 0xF);
+      nibble[7] = (uint8_t)((u32buf >> 28) & 0xF);
 
       /* サンプル数が 1 + (8の倍数) でない場合があるため、一旦バッファに受ける */
       buf[0] = IMAADPCMCoreDecoder_DecodeSample(&(core_decoder[ch]), nibble[0]);
@@ -779,7 +779,9 @@ static uint8_t IMAADPCMCoreEncoder_EncodeSample(
   /* nibble = sign(diff) * round(|diff| * 4 / stepsize) */
   nibble = (uint8_t)IMAADPCM_MIN_VAL((diffabs << 2) / stepsize, 7);
   /* nibbleの最上位ビットは符号ビット */
-  nibble |= sign ? 0x8 : 0x0;
+  if (sign) {
+    nibble |= 0x8;
+  }
 
   /* 量子化した差分を計算 */
   delta = nibble & 7;
@@ -797,7 +799,7 @@ static uint8_t IMAADPCMCoreEncoder_EncodeSample(
   prev = IMAADPCM_INNER_VAL(prev, -32768, 32767);
 
   /* インデックス更新 */
-  idx += IMAADPCM_index_table[nibble];
+  idx = (int8_t)(idx + IMAADPCM_index_table[nibble]);
   idx = IMAADPCM_INNER_VAL(idx, 0, 88);
 
   /* 計算結果の反映 */
@@ -999,12 +1001,13 @@ static IMAADPCMError IMAADPCMWAVEncoder_ConvertParameterToHeader(
     return IMAADPCM_ERROR_INVALID_FORMAT;
   }
   /* 4はチャンネルあたりのヘッダ領域サイズ */
-  block_data_size = enc_param->block_size - enc_param->num_channels * 4;
-  assert((block_data_size * 8) % (enc_param->bits_per_sample * enc_param->num_channels) == 0);
+  assert(enc_param->block_size >= (enc_param->num_channels * 4));
+  block_data_size = (uint32_t)(enc_param->block_size - (enc_param->num_channels * 4));
+  assert((block_data_size * 8) % (uint32_t)(enc_param->bits_per_sample * enc_param->num_channels) == 0);
   assert((enc_param->bits_per_sample * enc_param->num_channels) != 0);
-  tmp_header.num_samples_per_block = (uint16_t)((block_data_size * 8) / (enc_param->bits_per_sample * enc_param->num_channels));
+  tmp_header.num_samples_per_block = (uint16_t)((block_data_size * 8) / (uint32_t)(enc_param->bits_per_sample * enc_param->num_channels));
   /* ヘッダに入っている分+1 */
-  tmp_header.num_samples_per_block += 1;
+  tmp_header.num_samples_per_block++;
   assert(tmp_header.num_samples_per_block != 0);
   tmp_header.bytes_per_sec = (enc_param->block_size * enc_param->sampling_rate) / tmp_header.num_samples_per_block;
 
