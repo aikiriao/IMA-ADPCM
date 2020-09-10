@@ -281,7 +281,7 @@ static void print_usage(const char* program_name)
 {
   printf(
       "IMA-ADPCM encoder/decoder Version." IMAADPCMCUI_VERSION_STRING "\n" \
-      "Usage: %s -[ed] INPUT.wav OUTPUT.wav \n" \
+      "Usage: %s -[edr] INPUT.wav OUTPUT.wav \n" \
       "-e: encode mode (PCM wav -> IMA-ADPCM wav)\n" \
       "-d: decode mode (IMA-ADPCM wav -> PCM wav)\n" \
       "-r: output residual (PCM wav -> Residual PCM wav)\n", 
