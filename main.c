@@ -134,7 +134,7 @@ static int do_encode(const char *wav_file, const char *encoded_filename)
   /* 16bit幅でデータ取得 */
   for (ch = 0; ch < num_channels; ch++) {
     for (smpl = 0; smpl < num_samples; smpl++) {
-      input[ch][smpl] = (WAVFile_PCM(wavfile, smpl, ch) >> 16);
+      input[ch][smpl] = (int16_t)(WAVFile_PCM(wavfile, smpl, ch) >> 16);
     }
   }
 
@@ -219,7 +219,7 @@ static int do_residual_output(const char *wav_file, const char *residual_filenam
   /* 16bit幅でデータ取得 */
   for (ch = 0; ch < num_channels; ch++) {
     for (smpl = 0; smpl < num_samples; smpl++) {
-      pcmdata[ch][smpl] = (WAVFile_PCM(wavfile, smpl, ch) >> 16);
+      pcmdata[ch][smpl] = (int16_t)(WAVFile_PCM(wavfile, smpl, ch) >> 16);
     }
   }
 
