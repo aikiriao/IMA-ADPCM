@@ -13,10 +13,10 @@
 #include <sys/stat.h>
 
 /* バージョン文字列 */
-#define IMAADPCMCUI_VERSION_STRING  "1.1.0"
+#define IMAADPCMCUI_VERSION_STRING  "1.1.1"
 
 /* ブロックサイズ 今の所1024で固定 */
-#define IMAADPCMCUI_BLOCK_SIZE      256
+#define IMAADPCMCUI_BLOCK_SIZE      1024
 
 /* デコード処理 */
 static int do_decode(const char *adpcm_filename, const char *decoded_filename)
