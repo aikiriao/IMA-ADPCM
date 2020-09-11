@@ -629,9 +629,8 @@ static void testIMAADPCMWAVDecoder_EncodeTest(void *obj)
 
     /* データ作成: 正弦波 */
     for (ch = 0; ch < NUM_CHANNELS; ch++) {
-      for (smpl = 1; smpl < NUM_SAMPLES; smpl++) {
+      for (smpl = 0; smpl < NUM_SAMPLES; smpl++) {
         input[ch][smpl] = (int16_t)(INT16_MAX * sin((2.0 * 3.1415 * 440.0 * smpl) / 48000.0));
-        decoded[ch][smpl] = 0;
       }
     }
 
@@ -674,7 +673,6 @@ static void testIMAADPCMWAVDecoder_EncodeTest(void *obj)
     rms_error = sqrt(rms_error / (NUM_SAMPLES * NUM_CHANNELS));
 
     /* 経験的に0.05 */
-    printf("RMSE: %f \n", rms_error);
     Test_AssertCondition(rms_error < 5.0e-2);
 
     /* 領域開放 */
