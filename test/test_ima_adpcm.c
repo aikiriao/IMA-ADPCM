@@ -673,6 +673,7 @@ static void testIMAADPCMWAVDecoder_EncodeTest(void *obj)
     rms_error = sqrt(rms_error / (NUM_SAMPLES * NUM_CHANNELS));
 
     /* 経験的に0.05 */
+    printf("RMSE: %f \n", rms_error);
     Test_AssertCondition(rms_error < 5.0e-2);
 
     /* 領域開放 */
