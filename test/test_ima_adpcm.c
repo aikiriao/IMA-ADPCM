@@ -631,6 +631,7 @@ static void testIMAADPCMWAVDecoder_EncodeTest(void *obj)
     for (ch = 0; ch < NUM_CHANNELS; ch++) {
       for (smpl = 1; smpl < NUM_SAMPLES; smpl++) {
         input[ch][smpl] = (int16_t)(INT16_MAX * sin((2.0 * 3.1415 * 440.0 * smpl) / 48000.0));
+        decoded[ch][smpl] = 0;
       }
     }
 
